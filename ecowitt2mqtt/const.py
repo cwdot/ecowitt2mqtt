@@ -45,6 +45,7 @@ CONF_OUTPUT_UNIT_TEMPERATURE: Final = "output_unit_temperature"
 CONF_PORT: Final = "port"
 CONF_PRECISION: Final = "precision"
 CONF_RAW_DATA: Final = "raw_data"
+CONF_SENSOR_NAME_MAP: Final = "sensor_name_map"
 CONF_VERBOSE: Final = "verbose"
 
 # Data points (glob):

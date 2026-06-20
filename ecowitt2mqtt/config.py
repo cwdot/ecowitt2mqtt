@@ -142,6 +142,7 @@ class Config(BaseModel):
     hass_discovery: bool = False
     hass_discovery_prefix: str = DEFAULT_HASS_DISCOVERY_PREFIX
     hass_entity_id_prefix: str | None = None
+    sensor_name_map: dict[str, str] = {}
 
     # Optional HTTP parameters:
     endpoint: str = DEFAULT_ENDPOINT

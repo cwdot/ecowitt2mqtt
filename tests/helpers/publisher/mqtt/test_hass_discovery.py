@@ -12,9 +12,12 @@ from ecowitt2mqtt.const import (
     CONF_DEFAULT_BATTERY_STRATEGY,
     CONF_HASS_DISCOVERY,
     CONF_HASS_ENTITY_ID_PREFIX,
+    CONF_SENSOR_NAME_MAP,
 )
 from ecowitt2mqtt.core import Ecowitt
+from ecowitt2mqtt.helpers.calculator import CalculatedDataPoint
 from ecowitt2mqtt.helpers.calculator.battery import BatteryStrategy
+from ecowitt2mqtt.helpers.device import Device
 from ecowitt2mqtt.helpers.publisher.factory import get_publishers
 from ecowitt2mqtt.helpers.publisher.mqtt.hass import HomeAssistantDiscoveryPublisher
 from tests.common import TEST_CONFIG_JSON, TEST_HASS_ENTITY_ID_PREFIX
@@ -6810,3 +6813,58 @@ async def test_publish_numeric_battery_strategy(
             ),
         ]
     )
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        TEST_CONFIG_JSON
+        | {
+            CONF_HASS_DISCOVERY: True,
+            CONF_SENSOR_NAME_MAP: {
+                "soil_ec_ad2": "Garden Soil EC",
+                "tempin": "Indoor Temp",
+            },
+        }
+    ],
+)
+def test_get_discovery_info_sensor_name_map(
+    ecowitt: Ecowitt, mock_aiomqtt_client: MagicMock
+) -> None:
+    """Test that sensor_name_map overrides the discovery name (and only the name).
+
+    Args:
+        ecowitt: A parsed Ecowitt object.
+        mock_aiomqtt_client: A mock aiomqtt Client object.
+    """
+    publisher = HomeAssistantDiscoveryPublisher(
+        ecowitt.configs.default_config, mock_aiomqtt_client
+    )
+    device = Device(
+        manufacturer="Ecowitt",
+        model="GW1200",
+        name="GW1200",
+        station_type="GW1200_V1.0.0",
+        unique_id="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    )
+
+    # A mapped key gets the friendly name, while topics and unique_id are untouched:
+    mapped = publisher._get_discovery_info(
+        device,
+        "soil_ec_ad2",
+        CalculatedDataPoint(data_point_key="soil_ec_ad2", value=575.0),
+    )
+    assert mapped.name == "Garden Soil EC"
+    assert mapped.unique_id == "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_soil_ec_ad2"
+    assert (
+        mapped.state_topic
+        == "homeassistant/sensor/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/soil_ec_ad2/state"
+    )
+
+    # An unmapped key falls through to the payload key:
+    unmapped = publisher._get_discovery_info(
+        device,
+        "rainrate",
+        CalculatedDataPoint(data_point_key="rainrate", value=0.0),
+    )
+    assert unmapped.name == "rainrate"

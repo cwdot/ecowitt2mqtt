@@ -511,7 +511,7 @@ class HomeAssistantDiscoveryPublisher(MqttPublisher):  # pylint: disable=too-few
                 sw_version=device.station_type,
             ),
             json_attributes_topic=f"{base_topic}/attributes",
-            name=payload_key,
+            name=self._config.sensor_name_map.get(payload_key, payload_key),
             retain=self._config.mqtt_retain,
             state_topic=f"{base_topic}/state",
             unique_id=f"{device.unique_id}_{payload_key}",

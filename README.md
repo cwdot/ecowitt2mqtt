@@ -267,6 +267,9 @@ mqtt_username: user
 output_unit_system: imperial
 port: 8080
 raw_data: false
+sensor_name_map:
+  soil_ec_ad2: Garden Soil EC
+  tempin: Indoor Temp
 verbose: false
 ```
 
@@ -298,6 +301,10 @@ verbose: false
   "output_unit_system": "imperial",
   "port": 8080,
   "raw_data": false,
+  "sensor_name_map": {
+    "soil_ec_ad2": "Garden Soil EC",
+    "tempin": "Indoor Temp"
+  },
   "verbose": false
 }
 ```
@@ -643,6 +650,24 @@ $ ecowitt2mqtt \
 
 You can provide a custom prefix for all Home Assistant entities via the
 `--hass-entity-id-prefix` config parameter.
+
+### Custom Sensor Names
+
+Some Ecowitt devices (e.g. the GW1200) publish raw, unfriendly sensor keys like
+`soil_ec_ad2` or `tempin` that can't be renamed in the device UI. The
+`sensor_name_map` config option (configuration file only) maps a raw payload key to
+the friendly name shown in Home Assistant:
+
+```yaml
+sensor_name_map:
+  soil_ec_ad2: Garden Soil EC
+  soil_ec_hum_ad2: Garden Soil Moisture
+  tempin: Indoor Temp
+```
+
+Only the displayed entity name is changed; the MQTT topic and `unique_id` keep using
+the raw key, so existing entities and their history are preserved. Keys that aren't in
+the map fall through to the raw key unchanged.
 
 ### Home Assistant OS Add-on
 
