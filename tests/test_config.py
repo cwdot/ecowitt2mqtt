@@ -29,6 +29,7 @@ from ecowitt2mqtt.const import (
     CONF_OUTPUT_UNIT_TEMPERATURE,
     CONF_PORT,
     CONF_PRECISION,
+    CONF_SENSOR_NAME_MAP,
     CONF_VERBOSE,
     ENV_BATTERY_OVERRIDES,
     UnitOfAccumulatedPrecipitation,
@@ -488,6 +489,42 @@ def test_port(config: dict[str, Any], is_valid: bool) -> None:
         is_valid: Whether the configuration is valid.
     """
     if not is_valid:
+        with pytest.raises(ConfigError):
+            _ = Configs(config)
+
+
+@pytest.mark.parametrize(
+    "value,sensor_name_map",
+    [
+        (
+            {"soil_ec_ad2": "Garden Soil EC", "tempin": "Indoor Temp"},
+            {"soil_ec_ad2": "Garden Soil EC", "tempin": "Indoor Temp"},
+        ),
+        (
+            "soil_ec_ad2=Garden Soil EC;tempin=Indoor Temp",
+            {"soil_ec_ad2": "Garden Soil EC", "tempin": "Indoor Temp"},
+        ),
+        ("tempin=Indoor=Temp", {"tempin": "Indoor=Temp"}),
+        ("tempin", None),
+        ("tempin=", None),
+        ("=Indoor Temp", None),
+        ("tempin=Indoor Temp;", None),
+    ],
+)
+def test_sensor_name_map(
+    value: dict[str, str] | str, sensor_name_map: dict[str, str] | None
+) -> None:
+    """Test parsing a sensor name map from a config file or an environment variable.
+
+    Args:
+        value: A value to use for the configuration option.
+        sensor_name_map: The expected sensor name map (None if invalid).
+    """
+    config = TEST_CONFIG_JSON | {CONF_SENSOR_NAME_MAP: value}
+    if sensor_name_map is not None:
+        configs = Configs(config)
+        assert configs.default_config.sensor_name_map == sensor_name_map
+    else:
         with pytest.raises(ConfigError):
             _ = Configs(config)
 

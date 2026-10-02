@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import asdict, dataclass
+from time import monotonic
 from typing import TypedDict
 
+from aiohttp import ClientError
 from aiomqtt import Client, MqttError
 
 from ecowitt2mqtt.backports.enum import StrEnum
@@ -90,6 +93,7 @@ from ecowitt2mqtt.helpers.calculator.battery import (
     get_battery_strategy,
 )
 from ecowitt2mqtt.helpers.device import Device
+from ecowitt2mqtt.helpers.gateway import async_get_soil_channel_names
 from ecowitt2mqtt.helpers.publisher.mqtt import MqttPublisher, generate_mqtt_payload
 from ecowitt2mqtt.helpers.typing import CalculatedValueType
 
@@ -443,6 +447,43 @@ STATE_CLASS_OVERRIDES = {
     DATA_POINT_YRAIN_PIEZO: StateClass.TOTAL,
 }
 
+SENSOR_NAMES = {
+    "baromabs": "Absolute Pressure",
+    "baromrel": "Relative Pressure",
+    "dailyrain": "Daily Rain",
+    "eventrain": "Event Rain",
+    "hourlyrain": "Hourly Rain",
+    "humidityabsin": "Indoor Absolute Humidity",
+    "humidityin": "Indoor Humidity",
+    "last24hrain": "Last 24h Rain",
+    "monthlyrain": "Monthly Rain",
+    "rainrate": "Rain Rate",
+    "tempin": "Indoor Temperature",
+    "totalrain": "Total Rain",
+    "weeklyrain": "Weekly Rain",
+    "wn20batt": "WN20 Battery",
+    "yearlyrain": "Yearly Rain",
+}
+
+# Soil sensors (WH51 and WH52) share one channel space; their payload keys are one of
+# these prefixes followed by the channel number:
+SOIL_SENSOR_NAMES = {
+    "soil_ec": "Soil EC",
+    "soil_ec_ad": "Soil EC AD",
+    "soil_ec_batt": "Soil EC Battery",
+    "soil_ec_hum": "Soil EC Moisture",
+    "soil_ec_hum_ad": "Soil EC Moisture AD",
+    "soil_ec_temp": "Soil EC Temperature",
+    "soilad": "Soil Moisture AD",
+    "soilbatt": "Soil Battery",
+    "soilmoisture": "Soil Moisture",
+}
+
+SOIL_PAYLOAD_KEY_REGEX = re.compile(r"(?P<prefix>.+?)(?P<channel>\d+)")
+
+# Seconds between polls of the gateway for its soil channel names:
+GATEWAY_POLL_INTERVAL = 12 * 60 * 60
+
 
 def get_availability_payload(
     data_point: CalculatedDataPoint,
@@ -473,6 +514,38 @@ class HomeAssistantDiscoveryPublisher(MqttPublisher):  # pylint: disable=too-few
         super().__init__(config, client)
 
         self._discovery_infos: dict[str, HassDiscoveryInfo] = {}
+        self._soil_channel_names: dict[str, str] = {}
+        self._soil_channel_names_polled_at: float | None = None
+
+    async def _async_poll_soil_channel_names(self) -> None:
+        """Poll the gateway for its soil channel names when they are stale.
+
+        A failed poll keeps the current names and is retried on the next payload.
+        """
+        if not self._config.gateway_host:
+            return
+
+        now = monotonic()
+        if (
+            self._soil_channel_names_polled_at is not None
+            and now - self._soil_channel_names_polled_at < GATEWAY_POLL_INTERVAL
+        ):
+            return
+
+        try:
+            self._soil_channel_names = await async_get_soil_channel_names(
+                self._config.gateway_host
+            )
+        except (ClientError, asyncio.TimeoutError, ValueError) as err:
+            LOGGER.error(
+                "Unable to get soil channel names from gateway %s: %s",
+                self._config.gateway_host,
+                err,
+            )
+            return
+
+        LOGGER.debug("Soil channel names from gateway: %s", self._soil_channel_names)
+        self._soil_channel_names_polled_at = now
 
     def _get_data_point_key(
         self, payload_key: str, data_point: CalculatedDataPoint
@@ -490,6 +563,31 @@ class HomeAssistantDiscoveryPublisher(MqttPublisher):  # pylint: disable=too-few
             data_point_key = data_point.data_point_key
 
         return data_point_key
+
+    def _get_name(self, payload_key: str) -> str:
+        """Get the entity name for a payload key.
+
+        The sensor name map can name a single payload key or give a soil channel
+        (CH<n>) a location that prefixes every sensor on that channel. A soil channel
+        that isn't in the map uses the name assigned to it on the gateway.
+        """
+        sensor_name_map = self._config.sensor_name_map
+
+        if name := sensor_name_map.get(payload_key):
+            return name
+        if name := SENSOR_NAMES.get(payload_key):
+            return name
+
+        match = SOIL_PAYLOAD_KEY_REGEX.fullmatch(payload_key)
+        if match and (name := SOIL_SENSOR_NAMES.get(match["prefix"])):
+            channel = match["channel"]
+            if location := sensor_name_map.get(
+                f"CH{channel}"
+            ) or self._soil_channel_names.get(channel):
+                return f"{location} {name}"
+            return f"{name} {channel}"
+
+        return payload_key
 
     def _get_discovery_info(
         self, device: Device, payload_key: str, data_point: CalculatedDataPoint
@@ -511,7 +609,7 @@ class HomeAssistantDiscoveryPublisher(MqttPublisher):  # pylint: disable=too-few
                 sw_version=device.station_type,
             ),
             json_attributes_topic=f"{base_topic}/attributes",
-            name=self._config.sensor_name_map.get(payload_key, payload_key),
+            name=self._get_name(payload_key),
             retain=self._config.mqtt_retain,
             state_topic=f"{base_topic}/state",
             unique_id=f"{device.unique_id}_{payload_key}",
@@ -553,6 +651,8 @@ class HomeAssistantDiscoveryPublisher(MqttPublisher):  # pylint: disable=too-few
         Raises:
             MqttError: Raised on any MQTT error.
         """
+        await self._async_poll_soil_channel_names()
+
         processed_data = ProcessedData(self._config, data)
         tasks: list[asyncio.Task] = []
 

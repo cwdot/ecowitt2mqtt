@@ -125,7 +125,7 @@ Within the `Upload Interval`, data should begin to appear in the MQTT broker.
 ## Command Line Options
 
 ```
-usage: ecowitt2mqtt [-h] [--version] [--battery-override BATTERY_OVERRIDES] [--boolean-battery-true-value boolean_battery_true_value] [-c config] [--default-battery-strategy default_battery_strategy] [--diagnostics] [--disable-calculated-data] [-e endpoint] [--hass-discovery]
+usage: ecowitt2mqtt [-h] [--version] [--battery-override BATTERY_OVERRIDES] [--boolean-battery-true-value boolean_battery_true_value] [-c config] [--default-battery-strategy default_battery_strategy] [--diagnostics] [--disable-calculated-data] [-e endpoint] [--gateway-host gateway_host] [--hass-discovery]
                     [--hass-discovery-prefix hass_discovery_prefix] [--hass-entity-id-prefix hass_entity_id_prefix] [--input-data-format input_data_format] [--input-unit-system input_unit_system] [-b mqtt_broker] [-p mqtt_password] [--mqtt-port mqtt_port] [--mqtt-retain] [--mqtt-tls] [-t mqtt_topic]
                     [-u mqtt_username] [--output-unit-system output_unit_system] [--output-unit-accumulated-precipitation output_unit_accumulated_precipitation] [--output-unit-distance output_unit_distance] [--output-unit-humidity output_unit_humidity]
                     [--output-unit-illuminance output_unit_illuminance] [--output-unit-precipitation-rate output_unit_precipitation_rate] [--output-unit-pressure output_unit_pressure] [--output-unit-speed output_unit_speed] [--output-unit-temperature output_unit_temperature] [--port port]
@@ -149,6 +149,8 @@ options:
                         Disable the output of calculated sensors
   -e endpoint, --endpoint endpoint
                         The relative endpoint/path to serve ecowitt2mqtt on (default: /data/report)
+  --gateway-host gateway_host
+                        The hostname or IP address of the gateway, polled for the soil channel names used in Home Assistant entity names
   --hass-discovery      Publish data in the Home Assistant MQTT Discovery format
   --hass-discovery-prefix hass_discovery_prefix
                         The Home Assistant MQTT Discovery topic prefix to use (default: homeassistant)
@@ -210,6 +212,8 @@ options:
   sensors (default: `false`)
 - `ECOWITT2MQTT_ENDPOINT`: the relative endpoint/path to serve ecowitt2mqtt on (default:
   `/data/report`)
+- `ECOWITT2MQTT_GATEWAY_HOST`: the hostname or IP address of the gateway, polled for the
+  soil channel names used in Home Assistant entity names (default: `None`)
 - `ECOWITT2MQTT_HASS_DISCOVERY_PREFIX`: the Home Assistant discovery prefix to use
   (default: `homeassistant`)
 - `ECOWITT2MQTT_HASS_DISCOVERY`: publish data in the Home Assistant MQTT Discovery format
@@ -236,6 +240,8 @@ options:
 - `ECOWITT2MQTT_PRECISION`: the precision to output data points at (default: no limit)
 - `ECOWITT2MQTT_RAW_DATA`: return raw data (don't attempt to translate any values)
   (default: `false`)
+- `ECOWITT2MQTT_SENSOR_NAME_MAP`: a semicolon-delimited list of key=name sensor name
+  overrides for Home Assistant (default: none)
 - `ECOWITT2MQTT_VERBOSE`: increase verbosity of logged output (default: `false`)
 
 ## Configuration File
@@ -654,20 +660,34 @@ You can provide a custom prefix for all Home Assistant entities via the
 ### Custom Sensor Names
 
 Some Ecowitt devices (e.g. the GW1200) publish raw, unfriendly sensor keys like
-`soil_ec_ad2` or `tempin` that can't be renamed in the device UI. The
-`sensor_name_map` config option (configuration file only) maps a raw payload key to
-the friendly name shown in Home Assistant:
+`soil_ec_ad2` or `tempin` that can't be renamed in the device UI. Common keys get a
+built-in friendly name in Home Assistant (e.g. `tempin` is `Indoor Temperature` and
+`soil_ec_hum2` is `Soil EC Moisture 2`); the `sensor_name_map` config option
+customizes them:
 
 ```yaml
 sensor_name_map:
-  soil_ec_ad2: Garden Soil EC
-  soil_ec_hum_ad2: Garden Soil Moisture
-  tempin: Indoor Temp
+  CH5: Frontyard/Right
+  tempin: Office Temp
 ```
 
+- `CH<n>` gives soil channel `n` a location, which replaces the channel number on every
+  soil sensor (WH51 and WH52) on that channel: `soil_ec_hum5` becomes
+  `Frontyard/Right Soil EC Moisture`.
+- A raw payload key sets that one sensor's whole name and wins over its channel.
+
+Soil channel locations can also come from the gateway itself: when `gateway_host` is
+set, the names assigned to soil channels on the gateway are polled from its local API
+every 12 hours and used for any channel that isn't in `sensor_name_map`.
+
+It can also be set with the `ECOWITT2MQTT_SENSOR_NAME_MAP` environment variable as a
+semicolon-delimited list of key=name pairs (e.g.,
+`ECOWITT2MQTT_SENSOR_NAME_MAP="CH5=Frontyard/Right;tempin=Office Temp"`). There is no
+CLI option.
+
 Only the displayed entity name is changed; the MQTT topic and `unique_id` keep using
-the raw key, so existing entities and their history are preserved. Keys that aren't in
-the map fall through to the raw key unchanged.
+the raw key, so existing entities and their history are preserved. Keys with no
+built-in name that aren't in the map fall through to the raw key unchanged.
 
 ### Home Assistant OS Add-on
 

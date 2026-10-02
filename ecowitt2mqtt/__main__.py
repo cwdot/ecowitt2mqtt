@@ -17,6 +17,7 @@ from ecowitt2mqtt.const import (
     CONF_DIAGNOSTICS,
     CONF_DISABLE_CALCULATED_DATA,
     CONF_ENDPOINT,
+    CONF_GATEWAY_HOST,
     CONF_HASS_DISCOVERY,
     CONF_HASS_DISCOVERY_PREFIX,
     CONF_HASS_ENTITY_ID_PREFIX,
@@ -42,6 +43,7 @@ from ecowitt2mqtt.const import (
     CONF_PORT,
     CONF_PRECISION,
     CONF_RAW_DATA,
+    CONF_SENSOR_NAME_MAP,
     CONF_VERBOSE,
     DEFAULT_BOOLEAN_BATTERY_TRUE_VALUE,
     DEFAULT_ENDPOINT,
@@ -55,6 +57,7 @@ from ecowitt2mqtt.const import (
     ENV_DIAGNOSTICS,
     ENV_DISABLE_CALCULATED_DATA,
     ENV_ENDPOINT,
+    ENV_GATEWAY_HOST,
     ENV_HASS_DISCOVERY,
     ENV_HASS_DISCOVERY_PREFIX,
     ENV_HASS_ENTITY_ID_PREFIX,
@@ -80,6 +83,7 @@ from ecowitt2mqtt.const import (
     ENV_PORT,
     ENV_PRECISION,
     ENV_RAW_DATA,
+    ENV_SENSOR_NAME_MAP,
     ENV_VERBOSE,
     UnitSystem,
     __version__,
@@ -96,6 +100,7 @@ ENV_VAR_TO_CONF_MAP = {
     ENV_DIAGNOSTICS: CONF_DIAGNOSTICS,
     ENV_DISABLE_CALCULATED_DATA: CONF_DISABLE_CALCULATED_DATA,
     ENV_ENDPOINT: CONF_ENDPOINT,
+    ENV_GATEWAY_HOST: CONF_GATEWAY_HOST,
     ENV_HASS_DISCOVERY: CONF_HASS_DISCOVERY,
     ENV_HASS_DISCOVERY_PREFIX: CONF_HASS_DISCOVERY_PREFIX,
     ENV_HASS_ENTITY_ID_PREFIX: CONF_HASS_ENTITY_ID_PREFIX,
@@ -123,6 +128,7 @@ ENV_VAR_TO_CONF_MAP = {
     ENV_PORT: CONF_PORT,
     ENV_PRECISION: CONF_PRECISION,
     ENV_RAW_DATA: CONF_RAW_DATA,
+    ENV_SENSOR_NAME_MAP: CONF_SENSOR_NAME_MAP,
     ENV_VERBOSE: CONF_VERBOSE,
 }
 
@@ -205,6 +211,15 @@ def get_cli_arguments(args: list[str]) -> dict[str, Any]:
             f"(default: {DEFAULT_ENDPOINT})"
         ),
         metavar=CONF_ENDPOINT,
+    )
+    parser.add_argument(
+        "--gateway-host",
+        dest=CONF_GATEWAY_HOST,
+        help=(
+            "The hostname or IP address of the gateway, polled for the soil channel "
+            "names used in Home Assistant entity names"
+        ),
+        metavar=CONF_GATEWAY_HOST,
     )
     parser.add_argument(
         "--hass-discovery",

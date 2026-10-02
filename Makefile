@@ -6,7 +6,7 @@ PLATFORM  ?= linux/amd64
 # Namespace the deployment runs in; push rolls it to pull the new image.
 NAMESPACE ?= home-automation
 
-.PHONY: docker push
+.PHONY: docker push restart
 
 docker:
 	docker build -t $(IMAGE):$(TAG) .
@@ -18,4 +18,8 @@ docker:
 push:
 	docker buildx build --platform $(PLATFORM) -t $(IMAGE):$(TAG) --load .
 	docker push $(IMAGE):$(TAG)
+	kubectl rollout restart deployment/ecowitt2mqtt -n $(NAMESPACE)
+
+# Restart the pod (e.g. to re-poll the gateway for its channel names right away).
+restart:
 	kubectl rollout restart deployment/ecowitt2mqtt -n $(NAMESPACE)

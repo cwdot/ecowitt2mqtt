@@ -142,6 +142,7 @@ class Config(BaseModel):
     hass_discovery: bool = False
     hass_discovery_prefix: str = DEFAULT_HASS_DISCOVERY_PREFIX
     hass_entity_id_prefix: str | None = None
+    gateway_host: str | None = None
     sensor_name_map: dict[str, str] = {}
 
     # Optional HTTP parameters:
@@ -298,6 +299,32 @@ class Config(BaseModel):
     validate_port = field_validator("port", mode="before")(validate_port)
 
     validate_raw_data = field_validator("raw_data", mode="before")(validate_boolean)
+
+    @field_validator("sensor_name_map", mode="before")
+    @classmethod
+    def validate_sensor_name_map(cls, value: dict[str, str] | str) -> dict[str, str]:
+        """Validate that the sensor name map is valid.
+
+        Args:
+            value: The sensor name map (a semicolon-delimited key=value string when
+                provided via environment variable).
+
+        Returns:
+            The parsed sensor name map in a dictionary.
+
+        Raises:
+            ValueError: Raises if the sensor name map is invalid.
+        """
+        if isinstance(value, dict):
+            return value
+
+        sensor_name_map = {}
+        for assignment in value.split(";"):
+            key, separator, name = assignment.partition("=")
+            if not (key and separator and name):
+                raise ValueError(f"invalid sensor name map: {value}")
+            sensor_name_map[key] = name
+        return sensor_name_map
 
     @model_validator(mode="before")
     @classmethod
